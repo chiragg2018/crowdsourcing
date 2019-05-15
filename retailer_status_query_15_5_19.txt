@@ -1,0 +1,162 @@
+select distinct dc.id as Customer_ID,
+dc."name" as Customer_Name,
+da.source_address as Source_Address,
+da.shop_no as Shop_No,
+da.floor_no as Floor, 
+da.latitude as Latitude,
+da.longitude as Longitude,
+da.building_name as Building_name,
+da.building_type as Building_Type,
+da.street_1 as Street_1,
+da.landmark as Landmark,
+da.street_2 as Street_2,
+da.street_type as Street_Type,
+dal.locality_name as Area,
+dp.pin_number as Pin_Code,
+dcc."name" as City,
+dc.has_ac_flag as Has_ac_flag,
+dc.has_computer as Has_Computer,
+pos."name" as pos_name,
+dc.outlet_size as Outlet_Size,
+dc.counter_type as counter_type,
+dc.promoter_space_kiosk as promoter_space_kiosk,
+dc.product_display_space_available as product_display_space_available,
+dc.twenty_four_x_seven as twenty_four_x_seven,
+dc."type" as retailer_type,
+dc.product_categories_sold as product_categories_sold,
+dc.in_house as in_house,
+dc.is_hospital_nearby_flag as is_hospital_nearby_flag,
+hospital_name as hospital_name,
+is_clinic_nearby_flag as is_clinic_nearby_flag,
+weekly_off_day as weekly_off_day,
+shop_type as shop_type,
+mel.DL, 
+mel.GST,
+cp.pur_fname,
+cp.pur_lname,
+cp.own_fname,
+cp.own_lname,
+concat_ws(',',cp.mobile_number_1,cp.mobile_number_2, cp.telephone_number_1, cp.telephone_number_2) as mobile_number,
+cp.email_id
+,(case when 
+dc."name" is not null
+and da.latitude is not null
+and da.longitude is not null
+and da.building_name is not null
+and da.building_type is not null
+and da.street_1 is not null
+and da.street_type is not null
+and dal.locality_name is not null
+and dp.pin_number is not null
+and dcc."name" is not null
+and dc.has_ac_flag is not null
+and dc.has_computer is not null
+and dc.outlet_size is not null
+and dc.counter_type is not null
+and dc.promoter_space_kiosk is not null
+and dc.product_display_space_available is not null
+and dc.twenty_four_x_seven is not null
+and dc."type" is not null
+and dc.product_categories_sold is not null
+and dc.in_house is not null
+and dc.is_hospital_nearby_flag is not null
+and is_clinic_nearby_flag is not null
+and weekly_off_day is not null
+and shop_type is not null
+and mel.DL is not null
+and cp.own_fname is not null
+and concat_ws(',',cp.mobile_number_1,cp.mobile_number_2, cp.telephone_number_1, cp.telephone_number_2) is not null
+then '100_percent_completed'
+else 'partial_completed'
+end)
+as retailer_status
+from dim_customer dc
+left join dim_address da
+on dc.fk_address_id=da.id
+left join (select fk_entity_id,
+	string_agg(distinct DL,',') as DL
+	,string_agg(distinct GST,',') as GST
+FROM
+	(select fk_entity_id,
+		case when license_type ilike '%drug%' then license_code end as DL
+		,case when license_type ilike '%gst%' then license_code end as GST
+	from mapping_entity_licence)base
+group by 1) mel
+on dc.id=mel.fk_entity_id
+left join dim_pincode dp
+on da.fk_pincode_id=dp.id
+left join dim_address_locality dal
+on da.locality_id=dal.id
+left join dim_city dcc
+on dp.fk_city_id=dcc.id 
+left join dim_pos pos
+on dc.pos_name_id=pos.id
+left join (select 
+	fk_entity_id
+	,pur_fname
+	,pur_lname
+	,own_fname
+	,own_lname
+	,string_agg(distinct email_id,',') email_id
+	,string_agg(distinct telephone_number_1::TEXT,',')telephone_number_1
+	,string_agg(distinct telephone_number_2::TEXT,',')telephone_number_2
+	,string_agg(distinct mobile_number_1::TEXT,',')mobile_number_1
+	,string_agg(distinct mobile_number_2::TEXT,',')mobile_number_2
+	,string_agg(distinct fax::TEXT,',')fax
+from (
+	select fk_entity_id
+		,last_value(case when position ilike '%purchase%' then first_name else null END) over (partition by fk_entity_id) pur_fname
+		,last_value(case when position ilike '%purchase%' then last_name else null END) over (partition by fk_entity_id) pur_lname
+		,last_value(case when (position ilike '%other%' or position='UNSURE' or position ilike'%own%' )then first_name else null END) over (partition by fk_entity_id) own_fname
+		,last_value(case when (position ilike '%other%' or position='UNSURE' or position ilike '%own%')then last_name else null END) over (partition by fk_entity_id) own_lname
+		,string_agg(distinct email_id,',') email_id
+		,string_agg(distinct telephone_number_1::TEXT,',') telephone_number_1
+		,string_agg(distinct telephone_number_2::TEXT,',') telephone_number_2
+		,string_agg(distinct mobile_number_1::TEXT,',') mobile_number_1
+		,string_agg(distinct mobile_number_2::TEXT,',') mobile_number_2
+		,string_agg(distinct fax::TEXT,',') fax
+	from dim_contact_person group by 1,first_name,last_name,position
+	)base
+group by 1,2,3,4,5) cp 
+on dc.id=cp.fk_entity_id
+where dc.id <>-100
+and dp.pin_number is not null
+and dc.fk_duplicate_of_id is null
+group by (dc.id,cp.email_id,
+dc."name",
+da.shop_no,
+da.floor_no, 
+da.building_name,
+da.building_type,
+da.street_1 ,
+da.landmark,
+da.street_2,
+da.street_type,
+da.source_address,
+da.latitude,
+da.longitude,
+pos.name,
+dp.pin_number,
+dal.locality_name,
+dcc."name",
+mel.DL,
+mel.GST,
+dc."type",
+dc.has_ac_flag,
+dc.has_computer,
+dc.outlet_size,
+dc.counter_type,
+dc.promoter_space_kiosk,
+dc.product_display_space_available,
+dc.twenty_four_x_seven,
+cp.fk_entity_id,
+cp.pur_fname,
+cp.pur_lname,
+cp.own_fname,
+cp.own_lname,
+cp.mobile_number_1,
+cp.mobile_number_2, 
+cp.telephone_number_1,
+cp.telephone_number_2,
+dc."type"
+)
